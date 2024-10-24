@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#4F46E5">
+    <title>GiocoCoro Presenze</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiR2lvY29Db3JvIFByZXNlbnplIiwic2hvcnRfbmFtZSI6Ikdpb2NvQ29ybyIsInN0YXJ0X3VybCI6Ii8iLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImJhY2tncm91bmRfY29sb3IiOiIjZmZmZmZmIiwidGhlbWVfY29sb3IiOiIjNEY0NkU1IiwiaWNvbnMiOlt7InNyYyI6Ii9hcGkvcGxhY2Vob2xkZXIvMTkyLzE5MiIsInNpemVzIjoiMTkyeDE5MiIsInR5cGUiOiJpbWFnZS9wbmcifV19">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="GiocoCoro">
+    <link rel="apple-touch-icon" href="/api/placeholder/192/192">
+    <style>
+        body {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        #root {
+            height: 100%;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        // Registrazione del Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(registration => {
+                    console.log('ServiceWorker registrato');
+                }).catch(err => {
+                    console.log('ServiceWorker errore: ', err);
+                });
+            });
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const AttendanceTracker = () => {
+            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+            const [newStudent, setNewStudent] = useState('');
+            const [dailyStudents, setDailyStudents] = useState(() => {
+                const saved = localStorage.getItem('dailyStudents');
+                return saved ? JSON.parse(saved) : {};
+            });
+            const [showStats, setShowStats] = useState(false);
+
+            useEffect(() => {
+                localStorage.setItem('dailyStudents', JSON.stringify(dailyStudents));
+            }, [dailyStudents]);
+
+            const handleAddStudent = () => {
+                if (newStudent.trim()) {
+                    setDailyStudents(prev => ({
+                        ...prev,
+                        [selectedDate]: [...(prev[selectedDate] || []), {
+                            name: newStudent.trim(),
+                            present: true
+                        }]
+                    }));
+                    setNewStudent('');
+                }
+            };
+
+            const toggleAttendance = (studentIndex) => {
+                setDailyStudents(prev => ({
+                    ...prev,
+                    [selectedDate]: prev[selectedDate].map((student, index) => 
+                        index === studentIndex 
+                            ? { ...student, present: !student.present }
+                            : student
+                    )
+                }));
+            };
+
+            const removeStudent = (studentIndex) => {
+                setDailyStudents(prev => ({
+                    ...prev,
+                    [selectedDate]: prev[selectedDate].filter((_, index) => index !== studentIndex)
+                }));
+            };
+
+            const calculateTotalStats = () => {
+                const stats = {};
+                Object.values(dailyStudents).forEach(dayStudents => {
+                    dayStudents.forEach(student => {
+                        if (!stats[student.name]) {
+                            stats[student.name] = { present: 0, absent: 0, total: 0 };
+                        }
+                        stats[student.name].total += 1;
+                        if (student.present) {
+                            stats[student.name].present += 1;
+                        } else {
+                            stats[student.name].absent += 1;
+                        }
+                    });
+                });
+
+                return Object.entries(stats)
+                    .map(([name, data]) => ({
+                        name,
+                        ...data,
+                        percentage: ((data.present / data.total) * 100).toFixed(1)
+                    }))
+                    .sort((a, b) => a.name.localeCompare(b.name));
+            };
+
+            const currentDayStudents = dailyStudents[selectedDate] || [];
+            const totalStats = calculateTotalStats();
+
+            return (
+                <div className="max-w-md mx-auto p-4">
+                    <h1 className="text-2xl font-bold mb-4 text-center">GiocoCoro Presenze</h1>
+
+                    <div className="mb-6">
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="w-full p-2 border rounded"
+                        />
+                    </div>
+
+                    <div className="flex gap-2 mb-6">
+                        <input
+                            type="text"
+                            placeholder="Nome nuovo studente"
+                            value={newStudent}
+                            onChange={(e) => setNewStudent(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleAddStudent()}
+                            className="flex-1 p-2 border rounded"
+                        />
+                        <button
+                            onClick={handleAddStudent}
+                            className="px-4 py-2 bg-blue-600 text-white rounded"
+                        >
+                            Aggiungi
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow mb-6">
+                        {currentDayStudents.map((student, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 border-b">
+                                <span>{student.name}</span>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => toggleAttendance(index)}
+                                        className={`px-3 py-1 rounded ${
+                                            student.present 
+                                                ? 'bg-green-600 text-white' 
+                                                : 'bg-gray-200'
+                                        }`}
+                                    >
+                                        {student.present ? "Presente" : "Assente"}
+                                    </button>
+                                    <button
+                                        onClick={() => removeStudent(index)}
+                                        className="px-2 text-red-600"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                        <p>Presenti oggi: {currentDayStudents.filter(s => s.present).length}</p>
+                        <p>Totale oggi: {currentDayStudents.length}</p>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow">
+                        <button
+                            className="w-full p-4 text-left font-semibold flex justify-between items-center"
+                            onClick={() => setShowStats(!showStats)}
+                        >
+                            <span>Statistiche Totali</span>
+                            <span>{showStats ? "▼" : "▶"}</span>
+                        </button>
+                        
+                        {showStats && (
+                            <div className="p-4">
+                                <table className="w-full">
+                                    <thead>
+                                        <tr>
+                                            <th className="text-left p-2">Nome</th>
+                                            <th className="text-center p-2">P</th>
+                                            <th className="text-center p-2">A</th>
+                                            <th className="text-center p-2">%</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {totalStats.map((stat, index) => (
+                                            <tr key={index} className="border-t">
+                                                <td className="p-2">{stat.name}</td>
+                                                <td className="text-center p-2">{stat.present}</td>
+                                                <td className="text-center p-2">{stat.absent}</td>
+                                                <td className="text-center p-2">{stat.percentage}%</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<AttendanceTracker />, document.getElementById('root'));
+    </script>
+</body>
+</html>
